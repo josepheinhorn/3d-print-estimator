@@ -1,0 +1,1302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3D Print Cost Estimator // ADV-5M-PRO</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap');
+
+  :root {
+    --neon: #39ff14;
+    --neon-dim: #39ff1466;
+    --neon-glow: #39ff1433;
+    --neon-bright: #7fff5e;
+    --bg-deep: #0a0a0f;
+    --bg-panel: #0d0d14;
+    --bg-card: #111119;
+    --bg-input: #0f0f18;
+    --border: #1a1a2e;
+    --border-glow: #39ff1444;
+    --text: #c8c8d4;
+    --text-dim: #6a6a7a;
+    --text-bright: #e8e8f0;
+    --danger: #ff3555;
+    --amber: #ffaa00;
+    --cyan: #00e5ff;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html { font-size: 14px; }
+
+  body {
+    background: var(--bg-deep);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Scanline overlay ── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0, 0, 0, 0.08) 2px,
+      rgba(0, 0, 0, 0.08) 4px
+    );
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  /* ── CRT vignette ── */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.5) 100%);
+    pointer-events: none;
+    z-index: 9998;
+  }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg-deep); }
+  ::-webkit-scrollbar-thumb { background: var(--neon-dim); border-radius: 3px; }
+
+  /* ── Layout ── */
+  .shell {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 1rem;
+  }
+
+  /* ── Title Bar ── */
+  .title-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-bottom: 1px solid var(--border-glow);
+    margin-bottom: 1rem;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .title-bar::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--neon), transparent);
+    animation: scan-line 3s linear infinite;
+  }
+
+  @keyframes scan-line {
+    0% { opacity: 0.3; }
+    50% { opacity: 1; }
+    100% { opacity: 0.3; }
+  }
+
+  .window-dots {
+    display: flex;
+    gap: 6px;
+  }
+  .window-dots span {
+    width: 12px; height: 12px;
+    border-radius: 50%;
+  }
+  .dot-r { background: var(--danger); }
+  .dot-y { background: var(--amber); }
+  .dot-g { background: var(--neon); }
+
+  .title-text {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+  }
+
+  .title-text .highlight {
+    color: var(--neon);
+    text-shadow: 0 0 8px var(--neon-dim);
+  }
+
+  /* ── Header ── */
+  .header {
+    display: flex;
+    align-items: flex-start;
+    gap: 1.5rem;
+    padding: 1.5rem;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    margin-bottom: 1rem;
+  }
+
+  .pixel-avatar {
+    width: 80px;
+    height: 96px;
+    border: 2px solid var(--neon-dim);
+    background: var(--bg-deep);
+    position: relative;
+    flex-shrink: 0;
+    image-rendering: pixelated;
+    overflow: hidden;
+  }
+
+  /* Pixel art girl placeholder - CSS-only */
+  .pixel-avatar .pixel-girl {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    grid-template-columns: repeat(10, 1fr);
+    grid-template-rows: repeat(12, 1fr);
+  }
+  .pixel-avatar .pixel-girl .p {
+    background: var(--neon);
+    opacity: 0.9;
+  }
+  .pixel-avatar .pixel-girl .s {
+    background: var(--neon-bright);
+    opacity: 0.6;
+  }
+  .pixel-avatar .pixel-girl .h {
+    background: #a855f7;
+    opacity: 0.9;
+  }
+  .pixel-avatar .pixel-girl .e {
+    background: #ff6b9d;
+    opacity: 0.85;
+  }
+
+  .header-info {
+    flex: 1;
+  }
+
+  .header-info h1 {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 1.6rem;
+    color: var(--neon);
+    text-shadow: 0 0 20px var(--neon-dim), 0 0 40px var(--neon-glow);
+    letter-spacing: 2px;
+    line-height: 1.2;
+  }
+
+  .header-info .sub {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    margin-top: 0.35rem;
+    letter-spacing: 0.5px;
+  }
+  .header-info .sub .tag {
+    color: var(--cyan);
+  }
+
+  .blink-cursor::after {
+    content: '█';
+    animation: blink 1s step-end infinite;
+    color: var(--neon);
+  }
+  @keyframes blink {
+    50% { opacity: 0; }
+  }
+
+  /* ── Print Progress Animation ── */
+  .print-progress-box {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    padding: 1rem;
+    margin-bottom: 1rem;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .print-progress-label {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 0.75rem;
+  }
+
+  .print-bed {
+    height: 60px;
+    background:
+      repeating-linear-gradient(
+        90deg,
+        var(--border) 0px,
+        var(--border) 1px,
+        transparent 1px,
+        transparent 20px
+      ),
+      repeating-linear-gradient(
+        0deg,
+        var(--border) 0px,
+        var(--border) 1px,
+        transparent 1px,
+        transparent 20px
+      );
+    background-color: var(--bg-deep);
+    position: relative;
+    border: 1px solid var(--border);
+  }
+
+  /* Nozzle assembly */
+  .nozzle-assembly {
+    position: absolute;
+    top: -4px;
+    animation: nozzle-x 3s ease-in-out infinite;
+    z-index: 10;
+  }
+
+  .nozzle-arm {
+    width: 40px;
+    height: 4px;
+    background: linear-gradient(90deg, #555, #888, #555);
+    border-radius: 1px;
+    position: relative;
+  }
+
+  .nozzle-tip {
+    position: absolute;
+    bottom: -8px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 8px solid #aaa;
+  }
+
+  .nozzle-tip::after {
+    content: '';
+    position: absolute;
+    top: -2px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 3px;
+    height: 3px;
+    background: var(--neon);
+    border-radius: 50%;
+    box-shadow: 0 0 6px var(--neon), 0 0 12px var(--neon-dim);
+    animation: heat-pulse 0.8s ease-in-out infinite alternate;
+  }
+
+  @keyframes heat-pulse {
+    0% { box-shadow: 0 0 4px var(--neon), 0 0 8px var(--neon-dim); }
+    100% { box-shadow: 0 0 8px var(--neon), 0 0 20px var(--neon-dim); }
+  }
+
+  /* Printed layers */
+  .printed-layers {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 0%;
+    transition: height 0.5s ease;
+    overflow: hidden;
+  }
+
+  .printed-layers-inner {
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      var(--neon-glow) 0px,
+      var(--neon-glow) 2px,
+      transparent 2px,
+      transparent 4px
+    );
+    animation: layer-fill 6s linear infinite;
+  }
+
+  @keyframes layer-fill {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 0.8; }
+  }
+
+  /* Filament trail */
+  .filament-trail {
+    position: absolute;
+    top: 8px;
+    height: 2px;
+    background: var(--neon);
+    opacity: 0.3;
+    border-radius: 1px;
+    box-shadow: 0 0 4px var(--neon-dim);
+    animation: trail-x 3s ease-in-out infinite;
+  }
+
+  @keyframes nozzle-x {
+    0%   { left: 5%; }
+    25%  { left: 85%; }
+    26%  { top: -2px; }
+    50%  { left: 10%; top: -2px; }
+    51%  { top: 0px; }
+    75%  { left: 80%; top: 0px; }
+    76%  { top: 2px; }
+    100% { left: 5%; top: 2px; }
+  }
+
+  @keyframes trail-x {
+    0%   { left: 5%; width: 0; }
+    12%  { width: 80%; }
+    25%  { left: 5%; width: 80%; }
+    26%  { left: 10%; width: 0; }
+    50%  { left: 10%; width: 70%; }
+    51%  { left: 80%; width: 0; }
+    75%  { left: 5%; width: 75%; }
+    76%  { width: 0; left: 5%; }
+    100% { left: 5%; width: 0; }
+  }
+
+  .print-status-line {
+    font-size: 0.65rem;
+    color: var(--text-dim);
+    margin-top: 0.5rem;
+    display: flex;
+    justify-content: space-between;
+  }
+  .print-status-line .active {
+    color: var(--neon);
+  }
+
+  /* ── Main Grid ── */
+  .main-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  @media (max-width: 768px) {
+    .main-grid { grid-template-columns: 1fr; }
+  }
+
+  /* ── Panels ── */
+  .panel {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    padding: 1.25rem;
+    position: relative;
+  }
+
+  .panel::before {
+    content: attr(data-label);
+    position: absolute;
+    top: -0.5rem;
+    left: 1rem;
+    background: var(--bg-panel);
+    padding: 0 0.5rem;
+    font-size: 0.65rem;
+    color: var(--neon);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  /* ── Form ── */
+  .field {
+    margin-bottom: 1rem;
+  }
+
+  .field:last-child { margin-bottom: 0; }
+
+  .field label {
+    display: block;
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 0.35rem;
+  }
+
+  .field label .unit {
+    color: var(--cyan);
+    font-size: 0.65rem;
+  }
+
+  .input-row {
+    display: flex;
+    align-items: center;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+
+  .input-row:focus-within {
+    border-color: var(--neon);
+    box-shadow: 0 0 12px var(--neon-glow), inset 0 0 8px var(--neon-glow);
+  }
+
+  .input-prefix {
+    padding: 0.6rem 0.75rem;
+    color: var(--neon);
+    font-size: 0.75rem;
+    border-right: 1px solid var(--border);
+    background: rgba(57, 255, 20, 0.03);
+    white-space: nowrap;
+    user-select: none;
+  }
+
+  .input-row input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    padding: 0.6rem 0.75rem;
+    color: var(--text-bright);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85rem;
+    outline: none;
+    min-width: 0;
+  }
+
+  .input-row input::placeholder {
+    color: var(--text-dim);
+    opacity: 0.5;
+  }
+
+  .input-suffix {
+    padding: 0.6rem 0.75rem;
+    color: var(--text-dim);
+    font-size: 0.7rem;
+    white-space: nowrap;
+  }
+
+  /* Time inputs */
+  .time-inputs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+  }
+
+  /* ── Results Panel ── */
+  .result-block {
+    background: var(--bg-deep);
+    border: 1px solid var(--border);
+    padding: 1rem;
+    margin-bottom: 0.75rem;
+    position: relative;
+  }
+
+  .result-block:last-child { margin-bottom: 0; }
+
+  .result-label {
+    font-size: 0.6rem;
+    color: var(--text-dim);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 0.5rem;
+  }
+
+  .result-value {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 1.8rem;
+    color: var(--neon);
+    text-shadow: 0 0 15px var(--neon-dim);
+    line-height: 1;
+  }
+
+  .result-value .currency {
+    font-size: 1.1rem;
+    color: var(--neon-bright);
+    vertical-align: top;
+  }
+
+  .result-sub {
+    font-size: 0.65rem;
+    color: var(--text-dim);
+    margin-top: 0.35rem;
+  }
+
+  /* Efficiency Score */
+  .efficiency-container {
+    text-align: center;
+    padding: 0.5rem 0;
+  }
+
+  .efficiency-ring {
+    width: 110px;
+    height: 110px;
+    margin: 0 auto 0.75rem;
+    position: relative;
+  }
+
+  .efficiency-ring svg {
+    width: 100%;
+    height: 100%;
+    transform: rotate(-90deg);
+  }
+
+  .efficiency-ring .ring-bg {
+    fill: none;
+    stroke: var(--border);
+    stroke-width: 6;
+  }
+
+  .efficiency-ring .ring-fill {
+    fill: none;
+    stroke: var(--neon);
+    stroke-width: 6;
+    stroke-linecap: round;
+    stroke-dasharray: 283;
+    stroke-dashoffset: 283;
+    transition: stroke-dashoffset 1s ease, stroke 0.5s ease;
+    filter: drop-shadow(0 0 4px var(--neon-dim));
+  }
+
+  .efficiency-ring .score-text {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .efficiency-ring .score-num {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 1.6rem;
+    color: var(--neon);
+    text-shadow: 0 0 12px var(--neon-dim);
+    line-height: 1;
+  }
+
+  .efficiency-ring .score-label {
+    font-size: 0.55rem;
+    color: var(--text-dim);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-top: 2px;
+  }
+
+  .efficiency-grade {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.75rem;
+    letter-spacing: 1px;
+    padding: 0.25rem 0.75rem;
+    display: inline-block;
+    border: 1px solid;
+  }
+
+  .grade-excellent { color: var(--neon); border-color: var(--neon-dim); background: var(--neon-glow); }
+  .grade-good { color: var(--cyan); border-color: rgba(0,229,255,0.3); background: rgba(0,229,255,0.1); }
+  .grade-fair { color: var(--amber); border-color: rgba(255,170,0,0.3); background: rgba(255,170,0,0.1); }
+  .grade-poor { color: var(--danger); border-color: rgba(255,53,85,0.3); background: rgba(255,53,85,0.1); }
+
+  .breakdown-list {
+    margin-top: 0.75rem;
+    font-size: 0.65rem;
+    color: var(--text-dim);
+    text-align: left;
+  }
+
+  .breakdown-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.3rem 0;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+  }
+  .breakdown-item:last-child { border-bottom: none; }
+  .breakdown-item .bv { color: var(--text); }
+
+  /* ── Print Log ── */
+  .log-section {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    padding: 1.25rem;
+    position: relative;
+    margin-bottom: 1rem;
+  }
+
+  .log-section::before {
+    content: '// PRINT_LOG';
+    position: absolute;
+    top: -0.5rem;
+    left: 1rem;
+    background: var(--bg-panel);
+    padding: 0 0.5rem;
+    font-size: 0.65rem;
+    color: var(--neon);
+    letter-spacing: 2px;
+  }
+
+  .log-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .btn {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    padding: 0.5rem 1rem;
+    border: 1px solid var(--border);
+    background: var(--bg-input);
+    color: var(--text);
+    cursor: pointer;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .btn:hover {
+    border-color: var(--neon);
+    color: var(--neon);
+    box-shadow: 0 0 12px var(--neon-glow);
+    background: rgba(57, 255, 20, 0.05);
+  }
+
+  .btn-primary {
+    border-color: var(--neon-dim);
+    background: rgba(57, 255, 20, 0.08);
+    color: var(--neon);
+  }
+
+  .btn-primary:hover {
+    background: rgba(57, 255, 20, 0.15);
+    box-shadow: 0 0 20px var(--neon-glow), inset 0 0 10px var(--neon-glow);
+  }
+
+  .btn-danger {
+    border-color: rgba(255,53,85,0.3);
+    color: var(--danger);
+  }
+  .btn-danger:hover {
+    border-color: var(--danger);
+    box-shadow: 0 0 12px rgba(255,53,85,0.2);
+    background: rgba(255,53,85,0.05);
+  }
+
+  .log-table-wrap {
+    overflow-x: auto;
+  }
+
+  .log-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.7rem;
+  }
+
+  .log-table th {
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    color: var(--neon);
+    font-weight: 500;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    font-size: 0.6rem;
+    border-bottom: 1px solid var(--border-glow);
+    white-space: nowrap;
+  }
+
+  .log-table td {
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+    white-space: nowrap;
+  }
+
+  .log-table tbody tr:hover {
+    background: rgba(57, 255, 20, 0.03);
+  }
+
+  .log-table .cost-cell { color: var(--neon-bright); }
+  .log-table .score-cell { color: var(--cyan); }
+
+  .log-empty {
+    text-align: center;
+    padding: 2rem;
+    color: var(--text-dim);
+    font-size: 0.75rem;
+  }
+  .log-empty .prompt {
+    color: var(--neon);
+    margin-top: 0.5rem;
+    font-size: 0.65rem;
+    opacity: 0.6;
+  }
+
+  .log-table .delete-btn {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    padding: 0.15rem 0.4rem;
+    transition: color 0.2s;
+  }
+  .log-table .delete-btn:hover { color: var(--danger); }
+
+  /* ── Footer ── */
+  .footer {
+    text-align: center;
+    padding: 1rem;
+    font-size: 0.6rem;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+    border-top: 1px solid var(--border);
+  }
+  .footer .neon { color: var(--neon); }
+
+  /* ── Toast ── */
+  .toast {
+    position: fixed;
+    bottom: 2rem;
+    right: 2rem;
+    background: var(--bg-card);
+    border: 1px solid var(--neon-dim);
+    color: var(--neon);
+    padding: 0.75rem 1.25rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    box-shadow: 0 0 20px var(--neon-glow);
+    transform: translateY(120%);
+    transition: transform 0.3s ease;
+    z-index: 1000;
+  }
+  .toast.show { transform: translateY(0); }
+
+  /* ── Noise texture ── */
+  .noise-overlay {
+    position: fixed;
+    inset: 0;
+    opacity: 0.025;
+    pointer-events: none;
+    z-index: 9997;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-repeat: repeat;
+    background-size: 256px 256px;
+  }
+
+  /* Total stats bar */
+  .stats-bar {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .stat-item {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    padding: 0.75rem 1rem;
+    text-align: center;
+  }
+  .stat-item .sl { font-size: 0.55rem; color: var(--text-dim); letter-spacing: 2px; text-transform: uppercase; }
+  .stat-item .sv {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 1.1rem;
+    color: var(--cyan);
+    margin-top: 0.25rem;
+  }
+
+  @media (max-width: 600px) {
+    .stats-bar { grid-template-columns: 1fr; }
+    .header { flex-direction: column; align-items: center; text-align: center; }
+  }
+</style>
+</head>
+<body>
+<div class="noise-overlay"></div>
+
+<div class="shell">
+  <!-- Title Bar -->
+  <div class="title-bar">
+    <div class="window-dots">
+      <span class="dot-r"></span>
+      <span class="dot-y"></span>
+      <span class="dot-g"></span>
+    </div>
+    <span class="title-text">claude@workshop:~$ <span class="highlight">3d-cost-estimator</span> --printer=ADV-5M-PRO --mode=interactive</span>
+  </div>
+
+  <!-- Header -->
+  <div class="header">
+    <div class="pixel-avatar">
+      <div class="pixel-girl">
+        <!-- Row 1: Hair top -->
+        <div></div><div></div><div></div><div class="h"></div><div class="h"></div><div class="h"></div><div class="h"></div><div></div><div></div><div></div>
+        <!-- Row 2 -->
+        <div></div><div></div><div class="h"></div><div class="h"></div><div class="h"></div><div class="h"></div><div class="h"></div><div class="h"></div><div></div><div></div>
+        <!-- Row 3: Hair + face -->
+        <div></div><div class="h"></div><div class="h"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="h"></div><div class="h"></div><div></div>
+        <!-- Row 4: Eyes -->
+        <div></div><div class="h"></div><div class="s"></div><div class="p"></div><div class="s"></div><div class="s"></div><div class="p"></div><div class="s"></div><div class="h"></div><div></div>
+        <!-- Row 5: Face -->
+        <div></div><div class="h"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="h"></div><div></div>
+        <!-- Row 6: Mouth -->
+        <div></div><div></div><div class="s"></div><div class="s"></div><div class="e"></div><div class="e"></div><div class="s"></div><div class="s"></div><div></div><div></div>
+        <!-- Row 7: Neck -->
+        <div></div><div></div><div></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div></div><div></div><div></div>
+        <!-- Row 8: Shirt -->
+        <div></div><div></div><div class="p"></div><div class="p"></div><div class="p"></div><div class="p"></div><div class="p"></div><div class="p"></div><div></div><div></div>
+        <!-- Row 9 -->
+        <div></div><div class="p"></div><div class="p"></div><div class="p"></div><div class="p"></div><div class="p"></div><div class="p"></div><div class="p"></div><div class="p"></div><div></div>
+        <!-- Row 10 -->
+        <div class="p"></div><div class="p"></div><div class="s"></div><div class="p"></div><div class="p"></div><div class="p"></div><div class="p"></div><div class="s"></div><div class="p"></div><div class="p"></div>
+        <!-- Row 11: Arms + body -->
+        <div class="s"></div><div class="s"></div><div></div><div class="p"></div><div class="p"></div><div class="p"></div><div class="p"></div><div></div><div class="s"></div><div class="s"></div>
+        <!-- Row 12 -->
+        <div></div><div></div><div></div><div class="p"></div><div class="p"></div><div class="p"></div><div class="p"></div><div></div><div></div><div></div>
+      </div>
+    </div>
+    <div class="header-info">
+      <h1>3D PRINT COST<br>ESTIMATOR</h1>
+      <div class="sub">
+        <span class="tag">[FLASHFORGE]</span> Adventurer 5M Pro &mdash; <span class="blink-cursor">cost analysis module v1.0</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Print Progress Animation -->
+  <div class="print-progress-box">
+    <div class="print-progress-label">▸ print_simulation // nozzle_trace</div>
+    <div class="print-bed">
+      <div class="nozzle-assembly">
+        <div class="nozzle-arm">
+          <div class="nozzle-tip"></div>
+        </div>
+      </div>
+      <div class="filament-trail"></div>
+      <div class="printed-layers" id="printedLayers">
+        <div class="printed-layers-inner"></div>
+      </div>
+    </div>
+    <div class="print-status-line">
+      <span>BED: <span class="active">60°C</span></span>
+      <span>NOZZLE: <span class="active">210°C</span></span>
+      <span>FAN: <span class="active">100%</span></span>
+      <span id="simStatus">STATUS: <span class="active">SIMULATING</span></span>
+    </div>
+  </div>
+
+  <!-- Lifetime Stats -->
+  <div class="stats-bar">
+    <div class="stat-item">
+      <div class="sl">Total Prints Logged</div>
+      <div class="sv" id="totalPrints">0</div>
+    </div>
+    <div class="stat-item">
+      <div class="sl">Total Filament Used</div>
+      <div class="sv" id="totalFilament">0g</div>
+    </div>
+    <div class="stat-item">
+      <div class="sl">Total Spend</div>
+      <div class="sv" id="totalSpend">$0.00</div>
+    </div>
+  </div>
+
+  <!-- Main Grid -->
+  <div class="main-grid">
+    <!-- Input Panel -->
+    <div class="panel" data-label="// INPUT_PARAMS">
+      <div class="field">
+        <label>Filament Cost <span class="unit">(per roll)</span></label>
+        <div class="input-row">
+          <span class="input-prefix">$</span>
+          <input type="number" id="filCost" placeholder="25.00" step="0.01" min="0">
+          <span class="input-suffix">USD</span>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Roll Weight <span class="unit">(net filament)</span></label>
+        <div class="input-row">
+          <span class="input-prefix">⚖</span>
+          <input type="number" id="rollWeight" placeholder="1000" step="1" min="1">
+          <span class="input-suffix">grams</span>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Est. Print Weight <span class="unit">(from slicer)</span></label>
+        <div class="input-row">
+          <span class="input-prefix">▣</span>
+          <input type="number" id="printWeight" placeholder="48" step="0.1" min="0">
+          <span class="input-suffix">grams</span>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Print Time <span class="unit">(from slicer)</span></label>
+        <div class="time-inputs">
+          <div class="input-row">
+            <span class="input-prefix">◷</span>
+            <input type="number" id="printHours" placeholder="2" step="1" min="0">
+            <span class="input-suffix">hrs</span>
+          </div>
+          <div class="input-row">
+            <span class="input-prefix">&nbsp;</span>
+            <input type="number" id="printMins" placeholder="30" step="1" min="0" max="59">
+            <span class="input-suffix">min</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Print Name <span class="unit">(optional)</span></label>
+        <div class="input-row">
+          <span class="input-prefix">&gt;</span>
+          <input type="text" id="printName" placeholder="benchy_v2">
+        </div>
+      </div>
+
+      <div style="margin-top: 1rem; display: flex; gap: 0.5rem;">
+        <button class="btn btn-primary" onclick="calculate()" style="flex: 1;">▶ Calculate</button>
+        <button class="btn" onclick="saveToLog()">+ Log</button>
+      </div>
+    </div>
+
+    <!-- Results Panel -->
+    <div class="panel" data-label="// OUTPUT_RESULTS">
+      <div class="result-block">
+        <div class="result-label">Cost Per Print</div>
+        <div class="result-value" id="costResult"><span class="currency">$</span>0.00</div>
+        <div class="result-sub" id="costSub">enter parameters to calculate</div>
+      </div>
+
+      <div class="result-block">
+        <div class="result-label">Cost Per Gram</div>
+        <div class="result-value" id="cpgResult" style="font-size: 1.3rem;"><span class="currency">$</span>0.000</div>
+      </div>
+
+      <div class="result-block">
+        <div class="efficiency-container">
+          <div class="result-label">Efficiency Score</div>
+          <div class="efficiency-ring">
+            <svg viewBox="0 0 100 100">
+              <circle class="ring-bg" cx="50" cy="50" r="45"/>
+              <circle class="ring-fill" id="effRing" cx="50" cy="50" r="45"/>
+            </svg>
+            <div class="score-text">
+              <span class="score-num" id="effScore">--</span>
+              <span class="score-label">score</span>
+            </div>
+          </div>
+          <div class="efficiency-grade" id="effGrade">AWAITING DATA</div>
+
+          <div class="breakdown-list" id="breakdown">
+            <div class="breakdown-item"><span>Cost weight</span><span class="bv">--</span></div>
+            <div class="breakdown-item"><span>Time weight</span><span class="bv">--</span></div>
+            <div class="breakdown-item"><span>Mat. efficiency</span><span class="bv">--</span></div>
+            <div class="breakdown-item"><span>Prints/roll</span><span class="bv">--</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Print Log -->
+  <div class="log-section">
+    <div class="log-actions">
+      <button class="btn btn-primary" onclick="exportLog()">↓ Export JSON</button>
+      <button class="btn" onclick="importLog()">↑ Import Log</button>
+      <button class="btn btn-danger" onclick="clearLog()">✕ Clear Log</button>
+      <input type="file" id="importFile" accept=".json" style="display:none" onchange="handleImport(event)">
+    </div>
+    <div class="log-table-wrap">
+      <table class="log-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Name</th>
+            <th>Weight</th>
+            <th>Time</th>
+            <th>Cost</th>
+            <th>Score</th>
+            <th>Date</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="logBody">
+        </tbody>
+      </table>
+      <div class="log-empty" id="logEmpty">
+        <div>[ no prints logged ]</div>
+        <div class="prompt">> calculate a print and click "+ Log" to begin tracking</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span class="neon">▸</span> 3D PRINT COST ESTIMATOR <span class="neon">//</span> ADVENTURER 5M PRO <span class="neon">//</span> BUILT WITH CLAUDE
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+  // ─── State ───
+  let printLog = JSON.parse(localStorage.getItem('printLog3d') || '[]');
+  let lastCalc = null;
+
+  // ─── Init ───
+  renderLog();
+  updateStats();
+  animateLayers();
+
+  // ─── Layer animation tied to sim ───
+  function animateLayers() {
+    const el = document.getElementById('printedLayers');
+    let h = 0;
+    setInterval(() => {
+      h = (h + 0.5) % 70;
+      el.style.height = (15 + h) + '%';
+    }, 200);
+  }
+
+  // ─── Calculate ───
+  function calculate() {
+    const filCost = parseFloat(document.getElementById('filCost').value);
+    const rollWeight = parseFloat(document.getElementById('rollWeight').value);
+    const printWeight = parseFloat(document.getElementById('printWeight').value);
+    const hours = parseFloat(document.getElementById('printHours').value) || 0;
+    const mins = parseFloat(document.getElementById('printMins').value) || 0;
+    const name = document.getElementById('printName').value.trim() || 'unnamed_print';
+
+    if (!filCost || !rollWeight || !printWeight) {
+      toast('⚠ Missing required fields: cost, roll weight, print weight');
+      return;
+    }
+
+    const totalMinutes = hours * 60 + mins;
+    if (totalMinutes <= 0) {
+      toast('⚠ Print time must be greater than 0');
+      return;
+    }
+
+    // Calculations
+    const costPerGram = filCost / rollWeight;
+    const totalCost = costPerGram * printWeight;
+    const printsPerRoll = Math.floor(rollWeight / printWeight);
+
+    // Efficiency Score (0-100)
+    // Components:
+    //   1. Cost efficiency: lower cost = better (0-35 points)
+    //   2. Time efficiency: grams/hour ratio (0-30 points)
+    //   3. Material efficiency: % of roll used per print (0-20 points)
+    //   4. Prints per roll bonus (0-15 points)
+
+    const costScore = Math.max(0, 35 - (totalCost / 2) * 5);
+    const gramsPerHour = printWeight / (totalMinutes / 60);
+    const timeScore = Math.min(30, (gramsPerHour / 30) * 30);
+    const matPct = (printWeight / rollWeight) * 100;
+    const matScore = matPct < 50 ? 20 * (1 - matPct / 100) : 5;
+    const rollBonus = Math.min(15, (printsPerRoll / 50) * 15);
+
+    const efficiencyScore = Math.round(Math.min(100, Math.max(0, costScore + timeScore + matScore + rollBonus)));
+
+    // Update UI
+    document.getElementById('costResult').innerHTML =
+      `<span class="currency">$</span>${totalCost.toFixed(2)}`;
+    document.getElementById('costSub').textContent =
+      `${printWeight}g × $${costPerGram.toFixed(4)}/g — ${printsPerRoll} prints per roll`;
+
+    document.getElementById('cpgResult').innerHTML =
+      `<span class="currency">$</span>${costPerGram.toFixed(4)}`;
+
+    // Efficiency ring
+    const ring = document.getElementById('effRing');
+    const circumference = 2 * Math.PI * 45;
+    const offset = circumference - (efficiencyScore / 100) * circumference;
+    ring.style.strokeDashoffset = offset;
+
+    let ringColor = 'var(--neon)';
+    if (efficiencyScore < 30) ringColor = 'var(--danger)';
+    else if (efficiencyScore < 55) ringColor = 'var(--amber)';
+    else if (efficiencyScore < 80) ringColor = 'var(--cyan)';
+    ring.style.stroke = ringColor;
+
+    document.getElementById('effScore').textContent = efficiencyScore;
+
+    const gradeEl = document.getElementById('effGrade');
+    let grade, gradeClass;
+    if (efficiencyScore >= 80) { grade = '◆ EXCELLENT'; gradeClass = 'grade-excellent'; }
+    else if (efficiencyScore >= 55) { grade = '◇ GOOD'; gradeClass = 'grade-good'; }
+    else if (efficiencyScore >= 30) { grade = '○ FAIR'; gradeClass = 'grade-fair'; }
+    else { grade = '✕ POOR'; gradeClass = 'grade-poor'; }
+
+    gradeEl.textContent = grade;
+    gradeEl.className = 'efficiency-grade ' + gradeClass;
+
+    // Breakdown
+    document.getElementById('breakdown').innerHTML = `
+      <div class="breakdown-item"><span>Cost factor (0-35)</span><span class="bv">${costScore.toFixed(1)}</span></div>
+      <div class="breakdown-item"><span>Time factor (0-30)</span><span class="bv">${timeScore.toFixed(1)}</span></div>
+      <div class="breakdown-item"><span>Material eff. (0-20)</span><span class="bv">${matScore.toFixed(1)}</span></div>
+      <div class="breakdown-item"><span>Roll yield (0-15)</span><span class="bv">${rollBonus.toFixed(1)}</span></div>
+      <div class="breakdown-item"><span>g/hr throughput</span><span class="bv">${gramsPerHour.toFixed(1)} g/hr</span></div>
+    `;
+
+    lastCalc = {
+      name,
+      weight: printWeight,
+      time: `${hours}h ${mins}m`,
+      totalMinutes,
+      cost: totalCost,
+      costPerGram,
+      score: efficiencyScore,
+      grade: grade.replace(/[◆◇○✕] /, ''),
+      filCost,
+      rollWeight,
+      printsPerRoll,
+      date: new Date().toISOString()
+    };
+
+    toast('✓ Calculation complete');
+  }
+
+  // ─── Log Management ───
+  function saveToLog() {
+    if (!lastCalc) {
+      toast('⚠ Run a calculation first');
+      return;
+    }
+    printLog.push({ ...lastCalc, id: Date.now() });
+    localStorage.setItem('printLog3d', JSON.stringify(printLog));
+    renderLog();
+    updateStats();
+    toast('✓ Print logged: ' + lastCalc.name);
+  }
+
+  function renderLog() {
+    const body = document.getElementById('logBody');
+    const empty = document.getElementById('logEmpty');
+
+    if (printLog.length === 0) {
+      body.innerHTML = '';
+      empty.style.display = 'block';
+      return;
+    }
+
+    empty.style.display = 'none';
+    body.innerHTML = printLog.map((p, i) => `
+      <tr>
+        <td style="color: var(--text-dim);">${String(i + 1).padStart(2, '0')}</td>
+        <td>${escHtml(p.name)}</td>
+        <td>${p.weight}g</td>
+        <td>${p.time}</td>
+        <td class="cost-cell">$${p.cost.toFixed(2)}</td>
+        <td class="score-cell">${p.score}/100</td>
+        <td style="color: var(--text-dim);">${new Date(p.date).toLocaleDateString()}</td>
+        <td><button class="delete-btn" onclick="deleteEntry(${p.id})" title="Delete">✕</button></td>
+      </tr>
+    `).join('');
+  }
+
+  function deleteEntry(id) {
+    printLog = printLog.filter(p => p.id !== id);
+    localStorage.setItem('printLog3d', JSON.stringify(printLog));
+    renderLog();
+    updateStats();
+    toast('Entry removed');
+  }
+
+  function clearLog() {
+    if (printLog.length === 0) return;
+    if (confirm('Clear entire print log? This cannot be undone.')) {
+      printLog = [];
+      localStorage.setItem('printLog3d', JSON.stringify(printLog));
+      renderLog();
+      updateStats();
+      toast('Log cleared');
+    }
+  }
+
+  function updateStats() {
+    document.getElementById('totalPrints').textContent = printLog.length;
+    const totalG = printLog.reduce((s, p) => s + p.weight, 0);
+    document.getElementById('totalFilament').textContent = totalG.toFixed(0) + 'g';
+    const totalS = printLog.reduce((s, p) => s + p.cost, 0);
+    document.getElementById('totalSpend').textContent = '$' + totalS.toFixed(2);
+  }
+
+  // ─── Export / Import ───
+  function exportLog() {
+    if (printLog.length === 0) {
+      toast('⚠ No entries to export');
+      return;
+    }
+    const data = {
+      exportDate: new Date().toISOString(),
+      printer: 'FlashForge Adventurer 5M Pro',
+      version: '1.0',
+      entries: printLog
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `print-log-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast('✓ Log exported as JSON');
+  }
+
+  function importLog() {
+    document.getElementById('importFile').click();
+  }
+
+  function handleImport(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function (e) {
+      try {
+        const data = JSON.parse(e.target.result);
+        const entries = data.entries || data;
+        if (!Array.isArray(entries)) throw new Error('Invalid format');
+        const newCount = entries.length;
+        printLog = printLog.concat(entries.map(p => ({ ...p, id: p.id || Date.now() + Math.random() })));
+        localStorage.setItem('printLog3d', JSON.stringify(printLog));
+        renderLog();
+        updateStats();
+        toast(`✓ Imported ${newCount} entries`);
+      } catch (err) {
+        toast('⚠ Invalid JSON file');
+      }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+  }
+
+  // ─── Helpers ───
+  function escHtml(s) {
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  function toast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2500);
+  }
+
+  // ─── Auto-calculate on Enter ───
+  document.querySelectorAll('input').forEach(input => {
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') calculate();
+    });
+  });
+</script>
+</body>
+</html>
